@@ -1,3 +1,4 @@
+import AppKit
 import Testing
 @testable import PinOnTop
 
@@ -25,5 +26,28 @@ struct WelcomeTests {
     ])
     func quitAndReopenIsOfferedOnlyOnceScreenRecordingIsGrantedAfterLaunch(atLaunch: Bool, now: Bool, offered: Bool) {
         #expect(Rules.needsRelaunch(screenRecordingAtLaunch: atLaunch, screenRecordingNow: now) == offered)
+    }
+
+    // The first tip says the shortcut, so the welcome window doesn't say it twice.
+    @Test(arguments: [HotKey.standard.text, "⇧⌘K", "⌥F5", "⌃⌥⇧⌘Space"])
+    func theFirstTipNamesTheShortcutItsGivenAndNoOtherTipDoes(shortcutText: String) {
+        let tips = Tip.allCases.map { $0.text(shortcutText: shortcutText) }
+        #expect(tips.first?.contains(shortcutText) == true)
+        #expect(tips.dropFirst().allSatisfy { !$0.contains(shortcutText) })
+    }
+
+    @Test(arguments: [
+        (tip: Tip.options, word: MenuWords.pinned),
+        (tip: Tip.options, word: MenuWords.opacity),
+        (tip: Tip.options, word: MenuWords.unpin),
+        (tip: Tip.alwaysPin, word: MenuWords.alwaysPin),
+    ])
+    func theTipsNameTheOptionsWithTheWordsTheMenusUse(tip: Tip, word: String) {
+        #expect(tip.text(shortcutText: HotKey.standard.text).contains(word))
+    }
+
+    @Test(arguments: Tip.allCases)
+    func everyTipsSymbolIsAnSFSymbol(tip: Tip) {
+        #expect(NSImage(systemSymbolName: tip.symbol, accessibilityDescription: nil) != nil)
     }
 }

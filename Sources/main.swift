@@ -189,12 +189,125 @@ enum Rules {
         text.count > 70 ? "\(text.prefix(69))…" : text
     }
 
-    /// A shortcut the way macOS menus write it, such as ⌃⌥⌘P.
+    /// A shortcut the way macOS menus write it, such as ⌃⌥⌘P or ⌥F5.
     static func shortcutText(modifiers: NSEvent.ModifierFlags, key: String) -> String {
         let glyphs: [(flag: NSEvent.ModifierFlags, glyph: String)] = [
             (.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘"),
         ]
-        return glyphs.filter { modifiers.contains($0.flag) }.map(\.glyph).joined() + key.uppercased()
+        return glyphs.filter { modifiers.contains($0.flag) }.map(\.glyph).joined() + displayed(key)
+    }
+
+    /// A key as menus write it: one character upper cased, as long as it stays one character (ß
+    /// doesn't become SS), and a name such as Space or F5 as it is.
+    private static func displayed(_ key: String) -> String {
+        let upper = key.uppercased()
+        return key.count == 1 && upper.count == 1 ? upper : key
+    }
+
+    // MARK: Shortcut
+
+    /// The modifier keys a shortcut can use, as menus and Carbon's hot keys each write them.
+    private static let shortcutModifiers: [(flag: NSEvent.ModifierFlags, carbon: UInt32)] = [
+        (.control, UInt32(controlKey)), (.option, UInt32(optionKey)), (.shift, UInt32(shiftKey)), (.command, UInt32(cmdKey)),
+    ]
+
+    /// A key press's modifiers in Carbon's mask, which RegisterEventHotKey takes. Caps Lock, Fn and
+    /// the like are left out.
+    static func carbonModifiers(_ flags: NSEvent.ModifierFlags) -> UInt32 {
+        shortcutModifiers.filter { flags.contains($0.flag) }.reduce(0) { $0 | $1.carbon }
+    }
+
+    /// Carbon's mask as the modifier flags a menu item takes. Bits for other keys are left out.
+    static func modifierFlags(carbon: UInt32) -> NSEvent.ModifierFlags {
+        NSEvent.ModifierFlags(shortcutModifiers.filter { carbon & $0.carbon != 0 }.map(\.flag))
+    }
+
+    /// The keys menus show by name or symbol rather than by what they type, by virtual key code,
+    /// with the character a menu item's key equivalent uses for each.
+    private static let namedKeys: [Int: (name: String, equivalent: Int)] = {
+        let named: [Int: (name: String, equivalent: Int)] = [
+            kVK_Space: ("Space", 0x20), kVK_Return: ("↩", NSCarriageReturnCharacter), kVK_Tab: ("⇥", NSTabCharacter),
+            kVK_Delete: ("⌫", NSBackspaceCharacter), kVK_ForwardDelete: ("⌦", NSDeleteFunctionKey),
+            kVK_LeftArrow: ("←", NSLeftArrowFunctionKey), kVK_RightArrow: ("→", NSRightArrowFunctionKey),
+            kVK_UpArrow: ("↑", NSUpArrowFunctionKey), kVK_DownArrow: ("↓", NSDownArrowFunctionKey),
+            kVK_Home: ("↖", NSHomeFunctionKey), kVK_End: ("↘", NSEndFunctionKey),
+            kVK_PageUp: ("⇞", NSPageUpFunctionKey), kVK_PageDown: ("⇟", NSPageDownFunctionKey),
+        ]
+        let functionKeys = [
+            kVK_F1, kVK_F2, kVK_F3, kVK_F4, kVK_F5, kVK_F6, kVK_F7, kVK_F8, kVK_F9, kVK_F10,
+            kVK_F11, kVK_F12, kVK_F13, kVK_F14, kVK_F15, kVK_F16, kVK_F17, kVK_F18, kVK_F19, kVK_F20,
+        ]
+        // NSEvent's F-key characters run in order from F1.
+        return functionKeys.enumerated().reduce(into: named) { keys, fKey in
+            keys[fKey.element] = ("F\(fKey.offset + 1)", NSF1FunctionKey + fKey.offset)
+        }
+    }()
+
+    /// Keys that can't be in a shortcut: Escape cancels recording one, and the rest type nothing.
+    private static let unusableKeys: Set<Int> = [
+        kVK_Escape, kVK_Command, kVK_RightCommand, kVK_Shift, kVK_RightShift, kVK_Option, kVK_RightOption,
+        kVK_Control, kVK_RightControl, kVK_CapsLock, kVK_Function, kVK_Help, kVK_ANSI_KeypadClear,
+        kVK_VolumeUp, kVK_VolumeDown, kVK_Mute, kVK_JIS_Eisu, kVK_JIS_Kana,
+    ]
+
+    /// A key's name as menus show it: Space, ↩, F5 and the like by name, and any other key by the
+    /// character it types with no modifiers (`characters`), letters upper cased. Nil for a key that
+    /// can't be named, such as Escape or a volume key.
+    static func keyName(keyCode: UInt32, characters: String?) -> String? {
+        let code = Int(keyCode)
+        if let named = namedKeys[code] { return named.name }
+        guard code < 128, !unusableKeys.contains(code), let characters, characters.count == 1,
+              let character = characters.first, isPrintable(character)
+        else { return nil }
+        return displayed(characters)
+    }
+
+    /// Whether a character can be shown: not a space, a control character or one of NSEvent's
+    /// private characters for keys such as Help.
+    private static func isPrintable(_ character: Character) -> Bool {
+        let hidden: [Unicode.GeneralCategory] = [.control, .format, .privateUse, .surrogate, .unassigned]
+        return !character.isWhitespace && character.unicodeScalars.allSatisfy { !hidden.contains($0.properties.generalCategory) }
+    }
+
+    /// The key equivalent a menu item shows for a shortcut's key: the character it types, lower
+    /// cased (upper case would add Shift), or NSEvent's character for a named key such as F5 or
+    /// an arrow. Nil for a key a menu can't show, so the item shows none.
+    static func menuKeyEquivalent(keyCode: UInt32, key: String) -> String? {
+        if let named = namedKeys[Int(keyCode)] {
+            return Unicode.Scalar(UInt32(named.equivalent)).map { String(Character($0)) }
+        }
+        return key.count == 1 ? key.lowercased() : nil
+    }
+
+    /// The shortcut a key press makes, or why it can't be one. It needs a key with a name and at
+    /// least one of ⌘, ⌃ or ⌥, or pressing it in any app would pin a window; Shift alone isn't
+    /// enough. `characters` are what the key types with no modifiers.
+    static func shortcut(keyCode: UInt32, modifiers: NSEvent.ModifierFlags, characters: String?) -> Result<Shortcut, ShortcutProblem> {
+        guard let key = keyName(keyCode: keyCode, characters: characters) else { return .failure(.unnamedKey) }
+        let shortcut = Shortcut(keyCode: keyCode, modifiers: carbonModifiers(modifiers), key: key)
+        guard !modifiers.isDisjoint(with: [.command, .control, .option]) else {
+            return .failure(.needsModifier(shortcut.text))
+        }
+        return .success(shortcut)
+    }
+
+    /// The shortcut as stored. Missing, unreadable or invalid data (no ⌘, ⌃ or ⌥, a key it can't
+    /// name, or values it doesn't know) means the default, ⌃⌥⌘P.
+    static func shortcut(from data: Data?) -> Shortcut {
+        // Making it again from its parts catches every invalid value: modifier bits for other keys
+        // don't survive the trip, and nor does a key that isn't its key code's name.
+        guard let data, let stored = try? JSONDecoder().decode(Shortcut.self, from: data),
+              case let .success(remade) = shortcut(
+                  keyCode: stored.keyCode, modifiers: modifierFlags(carbon: stored.modifiers), characters: stored.key),
+              remade == stored
+        else { return HotKey.standard }
+        return stored
+    }
+
+    /// The shortcut, ready to store as small JSON. Nil for the default, which is stored as nothing,
+    /// so a reset leaves no key behind.
+    static func shortcutData(_ shortcut: Shortcut) -> Data? {
+        shortcut == HotKey.standard ? nil : try? JSONEncoder().encode(shortcut)
     }
 
     // MARK: Fades
@@ -228,6 +341,42 @@ struct AlwaysPinRule: Codable, Equatable, Sendable {
     let windowTitle: String
 }
 
+/// A shortcut, as registered with macOS and stored: the key's virtual key code, the modifiers in
+/// Carbon's mask, and the key's name as menus show it. The name is kept because it depends on the
+/// keyboard layout, so it can't be worked out from the key code later.
+struct Shortcut: Codable, Equatable, Sendable {
+    let keyCode: UInt32
+    let modifiers: UInt32
+    let key: String
+
+    /// The modifiers as a menu item takes them.
+    var modifierFlags: NSEvent.ModifierFlags { Rules.modifierFlags(carbon: modifiers) }
+
+    /// As menus write it, such as ⌃⌥⌘P.
+    var text: String { Rules.shortcutText(modifiers: modifierFlags, key: key) }
+}
+
+/// Why a shortcut can't be used. The Change Shortcut window says so, and the old one stays.
+enum ShortcutProblem: Error, Equatable, Sendable {
+    /// A key with no name to show, such as a volume key.
+    case unnamedKey
+    /// No ⌘, ⌃ or ⌥. Holds the shortcut as menus write it.
+    case needsModifier(String)
+    /// macOS wouldn't register it. Holds the shortcut as menus write it.
+    case inUse(String)
+
+    var message: String {
+        switch self {
+        case .unnamedKey:
+            "That key can't be part of a shortcut. Try a letter, a digit or an F-key."
+        case let .needsModifier(text):
+            "A shortcut needs ⌘, ⌃ or ⌥ (Shift alone isn't enough), or pressing \(text) in any app would pin a window."
+        case let .inUse(text):
+            "Another app may already be using \(text). Try a different shortcut."
+        }
+    }
+}
+
 /// What changes the processes Always Pin leaves alone.
 enum SuppressionChange: Equatable, Sendable {
     case unpinnedByHand(pid_t, remembered: Bool)
@@ -242,6 +391,19 @@ enum MirrorFade: Equatable, Sendable {
 
     /// In seconds. Fading out is quicker, so the real window isn't kept waiting.
     var duration: TimeInterval { self == .fadeIn ? 0.15 : 0.1 }
+}
+
+/// What the menus call a pinned window's options, and the menu bar menu's headers for pinned
+/// windows and Always Pin. The welcome tips and the pin badge's tooltip name them too, so they
+/// can't drift.
+enum MenuWords {
+    static let pinned = "Pinned"
+    static let opacity = "Opacity"
+    static let alwaysPin = "Always Pin"
+    static let unpin = "Unpin"
+
+    /// The pin badge's tooltip.
+    static let badgeToolTip = "Pinned: click to switch to this window, right-click for \(opacity), \(alwaysPin) and \(unpin)"
 }
 
 // MARK: - Accessibility helpers
@@ -321,7 +483,7 @@ final class OverlayView: NSView {
         badge.frame = NSRect(x: bounds.maxX - 34, y: bounds.maxY - 34, width: 22, height: 22)
         badge.autoresizingMask = [.minXMargin, .minYMargin]
         badge.isHidden = true
-        badge.toolTip = "Pinned: click to switch to this window, right-click for options"
+        badge.toolTip = MenuWords.badgeToolTip
         addSubview(badge)
     }
 
@@ -360,8 +522,9 @@ final class Pin: NSObject, SCStreamOutput, SCStreamDelegate {
     let appName: String
     private(set) var label: String
     private(set) var title: String
-    /// Called when the pin should go. `byHand` is true when it was unpinned from the right-click
-    /// menu, and false when the window closed or capture stopped.
+    /// Called when the pin should go. `byHand` is true when it was unpinned from its menu (by
+    /// right-clicking, or under Pinned in the menu bar menu), and false when the window closed or
+    /// capture stopped.
     var onEnded: ((Pin, _ byHand: Bool) -> Void)?
     /// Always Pin for this window's app: whether it's on, and switching it.
     var isAlwaysPinned: ((Pin) -> Bool)?
@@ -546,12 +709,14 @@ final class Pin: NSObject, SCStreamOutput, SCStreamDelegate {
 
     @objc private func toggleAlwaysPin() { onToggleAlwaysPin?(self) }
 
+    /// The window's options. Right-clicking it and its item under Pinned in the menu bar menu both
+    /// open this menu, so the two can't drift. Its items target the pin, so it works from either.
     func contextMenu() -> NSMenu {
         let menu = NSMenu()
         let go = menu.addItem(withTitle: "Go to Window", action: #selector(goToWindow), keyEquivalent: "")
         go.target = self
 
-        let opacityItem = menu.addItem(withTitle: "Opacity", action: nil, keyEquivalent: "")
+        let opacityItem = menu.addItem(withTitle: MenuWords.opacity, action: nil, keyEquivalent: "")
         let opacityMenu = NSMenu()
         let current = Rules.opacityStep(for: opacity)
         for percent in Rules.opacitySteps {
@@ -564,7 +729,7 @@ final class Pin: NSObject, SCStreamOutput, SCStreamDelegate {
 
         // Without a bundle ID the app can't be found again after it restarts, so the item stays
         // disabled (it has no action).
-        let always = menu.addItem(withTitle: "Always Pin “\(Rules.menuTitle(appName))”", action: nil, keyEquivalent: "")
+        let always = menu.addItem(withTitle: "\(MenuWords.alwaysPin) “\(Rules.menuTitle(appName))”", action: nil, keyEquivalent: "")
         if bundleID == nil {
             always.toolTip = "This app has no bundle identifier, so Pin on Top can't remember it."
         } else {
@@ -574,7 +739,7 @@ final class Pin: NSObject, SCStreamOutput, SCStreamDelegate {
         }
 
         menu.addItem(.separator())
-        let unpinItem = menu.addItem(withTitle: "Unpin", action: #selector(unpin), keyEquivalent: "")
+        let unpinItem = menu.addItem(withTitle: MenuWords.unpin, action: #selector(unpin), keyEquivalent: "")
         unpinItem.target = self
         return menu
     }
@@ -612,32 +777,36 @@ final class Pin: NSObject, SCStreamOutput, SCStreamDelegate {
     }
 }
 
-// MARK: - Global hot key (Ctrl-Option-Command-P)
+// MARK: - Global hot key
 
-/// The one shortcut. The registered hot key and the menu item both read it, so they can't drift.
+/// The shortcut's fixed parts. The one in use can be changed: the app keeps it, and the hot key,
+/// the menu item, the welcome tips and the Change Shortcut window all read that one, so they
+/// can't drift.
 enum HotKey {
-    static let keyCode = UInt32(kVK_ANSI_P)
-    static let modifiers = UInt32(cmdKey | optionKey | controlKey)
-    static let menuKey = "p"
-    static let menuModifiers: NSEvent.ModifierFlags = [.control, .option, .command]
+    /// ⌃⌥⌘P: the shortcut until it's changed, and again after a reset.
+    static let standard = Shortcut(keyCode: UInt32(kVK_ANSI_P), modifiers: UInt32(cmdKey | optionKey | controlKey), key: "P")
     static let signature = OSType(0x5049_4E54) // "PINT"
-
-    /// The shortcut as menus write it: ⌃⌥⌘P.
-    static var text: String { Rules.shortcutText(modifiers: menuModifiers, key: menuKey) }
 }
 
 @MainActor var hotKeyHandler: (() -> Void)?
 
-func registerHotKey() {
+/// Passes the hot key's presses to `hotKeyHandler`. Installed once, at launch: changing the
+/// shortcut registers a different hot key with the same handler.
+func installHotKeyHandler() {
     var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
     InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
         DispatchQueue.main.async { MainActor.assumeIsolated { hotKeyHandler?() } }
         return noErr
     }, 1, &spec, nil, nil)
+}
 
+/// Registers a shortcut with macOS as the hot key. Nil when macOS won't, for example because
+/// another app already has it.
+func registerHotKey(_ shortcut: Shortcut) -> EventHotKeyRef? {
     var ref: EventHotKeyRef?
     let id = EventHotKeyID(signature: HotKey.signature, id: 1)
-    RegisterEventHotKey(HotKey.keyCode, HotKey.modifiers, id, GetApplicationEventTarget(), 0, &ref)
+    let status = RegisterEventHotKey(shortcut.keyCode, shortcut.modifiers, id, GetApplicationEventTarget(), 0, &ref)
+    return status == noErr ? ref : nil
 }
 
 // MARK: - Welcome window
@@ -683,15 +852,50 @@ enum Permission: CaseIterable {
     }
 }
 
+/// The welcome window's tips, one row each. The first names the shortcut, so they're built from
+/// its current text.
+enum Tip: CaseIterable, Sendable {
+    case pin, goTo, options, alwaysPin
+
+    /// An SF Symbol for the row.
+    var symbol: String {
+        switch self {
+        case .pin: "pin"
+        case .goTo: "cursorarrow.click"
+        case .options: "contextualmenu.and.cursorarrow"
+        case .alwaysPin: "arrow.clockwise"
+        }
+    }
+
+    /// The tip, in a sentence or two that fit two lines of the welcome window.
+    func text(shortcutText: String) -> String {
+        switch self {
+        case .pin:
+            "Press \(shortcutText) to pin or unpin a window, or pick one in the menu bar menu."
+        case .goTo:
+            "Click a pinned window to go to it. It floats again when you switch away."
+        case .options:
+            "Right-click a pinned window, or find it under \(MenuWords.pinned) in the menu bar menu, and choose \(MenuWords.opacity) or \(MenuWords.unpin)."
+        case .alwaysPin:
+            "\(MenuWords.alwaysPin), in the same menu, keeps one of an app's windows pinned after the app restarts."
+        }
+    }
+}
+
 /// What the welcome window shows, refreshed about once a second while it's open.
 @MainActor
 final class WelcomeModel: ObservableObject {
     @Published private(set) var screenRecording = Permission.screenRecording.isGranted
     @Published private(set) var accessibility = Permission.accessibility.isGranted
+    /// The shortcut in use, as the tips write it.
+    @Published private(set) var shortcutText: String
     private let screenRecordingAtLaunch: Bool
+    private let currentShortcut: () -> Shortcut
 
-    init(screenRecordingAtLaunch: Bool) {
+    init(screenRecordingAtLaunch: Bool, currentShortcut: @escaping () -> Shortcut) {
         self.screenRecordingAtLaunch = screenRecordingAtLaunch
+        self.currentShortcut = currentShortcut
+        shortcutText = currentShortcut().text
     }
 
     var needsRelaunch: Bool {
@@ -706,8 +910,10 @@ final class WelcomeModel: ObservableObject {
         // Only changes are published, so the window isn't redrawn every second for nothing.
         let screenRecording = Permission.screenRecording.isGranted
         let accessibility = Permission.accessibility.isGranted
+        let shortcutText = currentShortcut().text
         if screenRecording != self.screenRecording { self.screenRecording = screenRecording }
         if accessibility != self.accessibility { self.accessibility = accessibility }
+        if shortcutText != self.shortcutText { self.shortcutText = shortcutText }
     }
 }
 
@@ -715,6 +921,7 @@ struct WelcomeView: View {
     @ObservedObject var model: WelcomeModel
     let grant: (Permission) -> Void
     let relaunch: () -> Void
+    let showChangeShortcut: () -> Void
     let done: () -> Void
 
     var body: some View {
@@ -726,8 +933,6 @@ struct WelcomeView: View {
                 Text("Welcome to Pin on Top")
                     .font(.title2.weight(.semibold))
                 Text(Tagline.text)
-                Text("Press \(HotKey.text) to pin or unpin the window you're using.")
-                    .foregroundStyle(.secondary)
             }
             .multilineTextAlignment(.center)
 
@@ -736,6 +941,16 @@ struct WelcomeView: View {
                     ForEach(Permission.allCases, id: \.self) { permission in
                         if permission != Permission.allCases.first { Divider() }
                         PermissionRow(permission: permission, granted: model.isGranted(permission), grant: grant)
+                    }
+                }
+                .padding(6)
+            }
+
+            GroupBox {
+                VStack(spacing: 10) {
+                    ForEach(Tip.allCases, id: \.self) { tip in
+                        if tip != Tip.allCases.first { Divider() }
+                        TipRow(tip: tip, shortcutText: model.shortcutText, showChangeShortcut: showChangeShortcut)
                     }
                 }
                 .padding(6)
@@ -795,19 +1010,55 @@ private struct PermissionRow: View {
     }
 }
 
-/// Shows the welcome window, keeping its permissions up to date while it's open.
+/// One tip: its symbol beside a sentence or two, which wrap rather than cut off. The shortcut's
+/// tip has a button to change it.
+private struct TipRow: View {
+    let tip: Tip
+    let shortcutText: String
+    let showChangeShortcut: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Image(systemName: tip.symbol)
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+            Text(tip.text(shortcutText: shortcutText))
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            if tip == .pin {
+                Button("Change…", action: showChangeShortcut)
+            }
+        }
+    }
+}
+
+/// Shows the welcome window, keeping its permissions and shortcut up to date while it's open.
 @MainActor
 final class WelcomeWindowController: NSObject, NSWindowDelegate {
     private let model: WelcomeModel
     private let grant: (Permission) -> Void
     private let relaunch: () -> Void
+    private let showChangeShortcut: () -> Void
     private var window: NSWindow?
     private var timer: Timer?
 
-    init(screenRecordingAtLaunch: Bool, grant: @escaping (Permission) -> Void, relaunch: @escaping () -> Void) {
-        model = WelcomeModel(screenRecordingAtLaunch: screenRecordingAtLaunch)
+    /// `currentShortcut` gives the shortcut in use, and `showChangeShortcut` opens the Change
+    /// Shortcut window.
+    init(
+        screenRecordingAtLaunch: Bool, currentShortcut: @escaping () -> Shortcut, grant: @escaping (Permission) -> Void,
+        relaunch: @escaping () -> Void, showChangeShortcut: @escaping () -> Void
+    ) {
+        model = WelcomeModel(screenRecordingAtLaunch: screenRecordingAtLaunch, currentShortcut: currentShortcut)
         self.grant = grant
         self.relaunch = relaunch
+        self.showChangeShortcut = showChangeShortcut
+    }
+
+    /// Shows a change, such as a new shortcut, now rather than at the next tick.
+    func refresh() {
+        model.refresh()
     }
 
     func show() {
@@ -827,7 +1078,9 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
     }
 
     private func makeWindow() -> NSWindow {
-        let view = WelcomeView(model: model, grant: grant, relaunch: relaunch) { [weak self] in self?.window?.close() }
+        let view = WelcomeView(model: model, grant: grant, relaunch: relaunch, showChangeShortcut: showChangeShortcut) { [weak self] in
+            self?.window?.close()
+        }
         let window = NSWindow(contentViewController: NSHostingController(rootView: view))
         window.styleMask = [.titled, .closable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
@@ -845,6 +1098,199 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
     }
 }
 
+// MARK: - Change Shortcut window
+
+/// What the Change Shortcut window shows.
+@MainActor
+final class ShortcutModel: ObservableObject {
+    /// The shortcut in use.
+    @Published var shortcut: Shortcut
+    @Published var isRecording = false
+    /// Why the last shortcut tried couldn't be used, until another is tried.
+    @Published var problem: ShortcutProblem?
+
+    init(shortcut: Shortcut) {
+        self.shortcut = shortcut
+    }
+}
+
+struct ShortcutView: View {
+    @ObservedObject var model: ShortcutModel
+    let record: () -> Void
+    let cancel: () -> Void
+    let reset: () -> Void
+    let done: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            GroupBox {
+                Group {
+                    if model.isRecording {
+                        Text("Press the new shortcut")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(model.shortcut.text)
+                    }
+                }
+                .font(.title2)
+                .frame(maxWidth: .infinity)
+                .padding(6)
+            }
+            Text(model.isRecording
+                ? "Hold ⌘, ⌃ or ⌥ and press a key. Press Escape to cancel."
+                : "Press it in any app to pin or unpin the window you're using.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            if let problem = model.problem {
+                Label {
+                    Text(problem.message)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .symbolRenderingMode(.multicolor)
+                }
+                .font(.callout)
+            }
+            HStack(alignment: .top) {
+                if model.isRecording {
+                    Button("Cancel", action: cancel)
+                } else {
+                    Button("Record New Shortcut", action: record)
+                }
+                Button("Reset to \(HotKey.standard.text)", action: reset)
+                    .disabled(model.shortcut == HotKey.standard)
+                Spacer()
+                Button("Done", action: done)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 400)
+    }
+}
+
+/// Shows the Change Shortcut window and records a new shortcut in it. While it records, the hot
+/// key is suspended, so pressing the current shortcut records it instead of pinning a window.
+@MainActor
+final class ShortcutWindowController: NSObject, NSWindowDelegate {
+    private let model: ShortcutModel
+    private let currentShortcut: () -> Shortcut
+    private let change: (Shortcut) -> Bool
+    private let suspend: () -> Void
+    private let resume: () -> Void
+    private var window: NSWindow?
+    private var monitor: Any?
+
+    /// `currentShortcut` gives the shortcut in use. `change` makes another one the shortcut and
+    /// says whether macOS took it; when it didn't, the old one is still working. `suspend` and
+    /// `resume` stop and restart the hot key around recording.
+    init(
+        currentShortcut: @escaping () -> Shortcut, change: @escaping (Shortcut) -> Bool,
+        suspend: @escaping () -> Void, resume: @escaping () -> Void
+    ) {
+        model = ShortcutModel(shortcut: currentShortcut())
+        self.currentShortcut = currentShortcut
+        self.change = change
+        self.suspend = suspend
+        self.resume = resume
+    }
+
+    func show() {
+        let window = self.window ?? makeWindow()
+        self.window = window
+        model.shortcut = currentShortcut()
+        // It's a menu bar app, so it has to come forward to take the key presses.
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    private func makeWindow() -> NSWindow {
+        let view = ShortcutView(
+            model: model,
+            record: { [weak self] in self?.startRecording() },
+            cancel: { [weak self] in self?.stopRecording() },
+            reset: { [weak self] in self?.apply(HotKey.standard) },
+            done: { [weak self] in self?.window?.close() })
+        let window = NSWindow(contentViewController: NSHostingController(rootView: view))
+        window.styleMask = [.titled, .closable]
+        window.title = "Change Shortcut"
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        window.center()
+        return window
+    }
+
+    private func startRecording() {
+        guard monitor == nil else { return }
+        suspend()
+        model.problem = nil
+        model.isRecording = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            let keyCode = event.keyCode
+            let modifiers = event.modifierFlags
+            let characters = event.characters(byApplyingModifiers: [])
+            MainActor.assumeIsolated { self?.recordKeyPress(keyCode: keyCode, modifiers: modifiers, characters: characters) }
+            // The key press is the new shortcut, so nothing else gets it.
+            return nil
+        }
+    }
+
+    /// A key press while recording. Modifier keys alone don't send one, so recording keeps
+    /// waiting until a key is pressed with them.
+    private func recordKeyPress(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, characters: String?) {
+        guard Int(keyCode) != kVK_Escape else {
+            stopRecording()
+            return
+        }
+        switch Rules.shortcut(keyCode: UInt32(keyCode), modifiers: modifiers, characters: characters) {
+        case let .success(shortcut):
+            apply(shortcut)
+        case let .failure(problem):
+            // Say why, and keep recording.
+            model.problem = problem
+        }
+    }
+
+    /// Makes a shortcut the one in use, ending any recording. If macOS won't take it, the old one
+    /// keeps working and the window says why.
+    private func apply(_ shortcut: Shortcut) {
+        endRecording()
+        if change(shortcut) {
+            model.shortcut = shortcut
+            model.problem = nil
+        } else {
+            model.problem = .inUse(shortcut.text)
+        }
+    }
+
+    /// Cancels recording, restoring the hot key.
+    private func stopRecording() {
+        guard endRecording() else { return }
+        model.problem = nil
+        resume()
+    }
+
+    /// Stops listening for key presses, and says whether it was recording.
+    @discardableResult
+    private func endRecording() -> Bool {
+        guard let monitor else { return false }
+        NSEvent.removeMonitor(monitor)
+        self.monitor = nil
+        model.isRecording = false
+        return true
+    }
+
+    // Switching to another app ends recording too, so the hot key isn't left suspended.
+    func windowDidResignKey(_ notification: Notification) {
+        stopRecording()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        stopRecording()
+        model.problem = nil
+    }
+}
+
 // MARK: - App
 
 @MainActor
@@ -859,13 +1305,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var autoPinFailures: [CGWindowID: Date] = [:]
     private static let alwaysPinKey = "alwaysPin"
     private static let hasSeenWelcomeKey = "hasSeenWelcome"
+    private static let shortcutKey = "shortcut"
+
+    /// The shortcut in use, and its hot key while it's registered (it isn't while a new shortcut
+    /// is being recorded, or if macOS wouldn't register it).
+    private var shortcut = HotKey.standard
+    private var hotKey: EventHotKeyRef?
 
     /// Screen Recording only takes effect after a relaunch, so the welcome window compares with this.
     private var screenRecordingAtLaunch = false
     private var welcome: WelcomeWindowController?
+    private var shortcutWindow: ShortcutWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         alwaysPin = Rules.alwaysPinRules(from: UserDefaults.standard.data(forKey: Self.alwaysPinKey))
+        shortcut = Rules.shortcut(from: UserDefaults.standard.data(forKey: Self.shortcutKey))
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         let menu = NSMenu()
@@ -875,7 +1329,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateIcon()
 
         hotKeyHandler = { [weak self] in self?.toggleFrontmostWindow() }
-        registerHotKey()
+        installHotKeyHandler()
+        hotKey = registerHotKey(shortcut)
 
         let timer = Timer(timeInterval: 0.15, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshAll() }
@@ -1058,40 +1513,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         UserDefaults.standard.set(Rules.alwaysPinData(rules), forKey: Self.alwaysPinKey)
     }
 
+    // MARK: Shortcut
+
+    @objc private func showChangeShortcut() {
+        let controller = shortcutWindow ?? ShortcutWindowController(
+            currentShortcut: { [weak self] in self?.shortcut ?? HotKey.standard },
+            change: { [weak self] in self?.changeShortcut(to: $0) ?? false },
+            suspend: { [weak self] in self?.suspendShortcut() },
+            resume: { [weak self] in self?.resumeShortcut() })
+        shortcutWindow = controller
+        controller.show()
+    }
+
+    /// Unregisters the hot key while a new shortcut is recorded, so pressing the current one
+    /// records it instead of pinning a window.
+    private func suspendShortcut() {
+        guard let hotKey else { return }
+        UnregisterEventHotKey(hotKey)
+        self.hotKey = nil
+    }
+
+    /// Registers the shortcut in use again, unless it's registered already.
+    private func resumeShortcut() {
+        guard hotKey == nil else { return }
+        hotKey = registerHotKey(shortcut)
+    }
+
+    /// Makes a shortcut the one in use, now and after the app reopens, and returns true. If macOS
+    /// won't register it, the old one keeps working and this returns false.
+    private func changeShortcut(to new: Shortcut) -> Bool {
+        suspendShortcut()
+        guard let registered = registerHotKey(new) else {
+            resumeShortcut()
+            return false
+        }
+        hotKey = registered
+        shortcut = new
+        // Nil, for the default, removes the key.
+        UserDefaults.standard.set(Rules.shortcutData(new), forKey: Self.shortcutKey)
+        // The menu reads the shortcut each time it opens. The welcome tips are told now.
+        welcome?.refresh()
+        return true
+    }
+
     // MARK: Menu
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         menu.addItem(.sectionHeader(title: Self.versionTitle))
 
-        let frontmost = menu.addItem(withTitle: "Pin/Unpin Frontmost Window", action: #selector(menuToggleFrontmost), keyEquivalent: HotKey.menuKey)
-        frontmost.keyEquivalentModifierMask = HotKey.menuModifiers
+        // A key a menu can't show leaves the item with no key equivalent.
+        let frontmost = menu.addItem(
+            withTitle: "Pin/Unpin Frontmost Window", action: #selector(menuToggleFrontmost),
+            keyEquivalent: Rules.menuKeyEquivalent(keyCode: shortcut.keyCode, key: shortcut.key) ?? "")
+        frontmost.keyEquivalentModifierMask = shortcut.modifierFlags
         frontmost.target = self
         frontmost.image = symbol("pin")
 
         if !pins.isEmpty {
             menu.addItem(.separator())
-            menu.addItem(.sectionHeader(title: "Pinned"))
+            menu.addItem(.sectionHeader(title: MenuWords.pinned))
             for pin in pins {
-                let item = menu.addItem(withTitle: pin.label, action: #selector(menuUnpin(_:)), keyEquivalent: "")
-                item.target = self
+                // It opens the window's right-click menu, so it has no action of its own.
+                let item = menu.addItem(withTitle: pin.label, action: nil, keyEquivalent: "")
                 item.state = .on
-                item.tag = Int(pin.windowID)
                 item.image = appIcon(pid: pin.pid)
-                item.toolTip = "Click to unpin"
+                item.submenu = pin.contextMenu()
             }
         }
 
         if !alwaysPin.isEmpty {
             menu.addItem(.separator())
-            menu.addItem(.sectionHeader(title: "Always Pin"))
+            menu.addItem(.sectionHeader(title: MenuWords.alwaysPin))
             for rule in alwaysPin {
                 let item = menu.addItem(withTitle: Rules.menuTitle(rule.appName), action: #selector(menuTurnOffAlwaysPin(_:)), keyEquivalent: "")
                 item.target = self
                 item.state = .on
                 item.representedObject = rule.bundleID
                 item.image = appIcon(bundleID: rule.bundleID)
-                item.toolTip = "Click to turn off Always Pin for this app"
+                item.toolTip = "Click to turn off \(MenuWords.alwaysPin) for this app"
             }
         }
 
@@ -1115,9 +1615,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.tag = index
             item.image = symbol("exclamationmark.triangle")
         }
-        let welcomeItem = menu.addItem(withTitle: "Welcome and Permissions…", action: #selector(showWelcome), keyEquivalent: "")
+        let welcomeItem = menu.addItem(withTitle: "Welcome and Tips…", action: #selector(showWelcome), keyEquivalent: "")
         welcomeItem.target = self
         welcomeItem.image = symbol("gearshape")
+        let shortcutItem = menu.addItem(withTitle: "Change Shortcut…", action: #selector(showChangeShortcut), keyEquivalent: "")
+        shortcutItem.target = self
+        shortcutItem.image = symbol("keyboard")
         let login = menu.addItem(withTitle: "Open at Login", action: #selector(toggleLoginItem), keyEquivalent: "")
         login.target = self
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
@@ -1168,11 +1671,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pin(window, byHand: true)
     }
 
-    @objc private func menuUnpin(_ sender: NSMenuItem) {
-        guard let pin = pins.first(where: { $0.windowID == CGWindowID(sender.tag) }) else { return }
-        unpin(pin, byHand: true)
-    }
-
     @objc private func menuTurnOffAlwaysPin(_ sender: NSMenuItem) {
         guard let bundleID = sender.representedObject as? String else { return }
         turnOffAlwaysPin(bundleID)
@@ -1205,8 +1703,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         UserDefaults.standard.set(true, forKey: Self.hasSeenWelcomeKey)
         let controller = welcome ?? WelcomeWindowController(
             screenRecordingAtLaunch: screenRecordingAtLaunch,
+            currentShortcut: { [weak self] in self?.shortcut ?? HotKey.standard },
             grant: { [weak self] in self?.grant($0) },
-            relaunch: { [weak self] in self?.relaunch() })
+            relaunch: { [weak self] in self?.relaunch() },
+            showChangeShortcut: { [weak self] in self?.showChangeShortcut() })
         welcome = controller
         controller.show()
     }
