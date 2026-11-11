@@ -13,7 +13,7 @@ cd "${0:A:h}"
 
 # The version for the app and the release. CHANGELOG.md's newest section and the README's zip
 # name must match it.
-VERSION="1.0.0"
+VERSION="1.1.0"
 
 install_app=false
 make_zip=false
