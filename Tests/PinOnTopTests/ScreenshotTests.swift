@@ -11,6 +11,10 @@ import Testing
 // skip it:
 //
 //   PIN_ON_TOP_SCREENSHOTS=1 ./test.sh --filter ScreenshotTests
+//
+// MenuMockUpTests, below, runs every time, CI included. It fails when menu.png has gone stale:
+// when the menu no longer uses a word the mock-up writes out, or build.sh's version isn't the one
+// the PNG was drawn for.
 
 /// The repo's top folder, found from this file's own path.
 private let root = URL(fileURLWithPath: #filePath)
@@ -18,7 +22,10 @@ private let root = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()
     .deletingLastPathComponent()
 
-@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["PIN_ON_TOP_SCREENSHOTS"] == "1"))
+/// Whether this run draws the screenshots.
+private let drawing = ProcessInfo.processInfo.environment["PIN_ON_TOP_SCREENSHOTS"] == "1"
+
+@Suite(.serialized, .enabled(if: drawing))
 @MainActor
 struct ScreenshotTests {
     @Test func drawsATimerPinnedOnTopOfABigRecipesWindow() throws {
@@ -26,8 +33,8 @@ struct ScreenshotTests {
     }
 
     @Test func drawsTheMenuBarMenuWithTheTimersOptionsOpen() throws {
-        try expectTheMenusOwnWords()
-        try save(MenuBarMenu(version: buildVersion()).canvas(), as: "menu.png")
+        let version = try buildVersion()
+        try save(MenuBarMenu(version: version).canvas(), as: "menu.png", version: version)
     }
 
     @Test func drawsTheWelcomeWindowWithBothPermissionsGranted() throws {
@@ -46,6 +53,43 @@ struct ScreenshotTests {
     }
 }
 
+// MARK: - Keeping menu.png current
+
+/// The keyword of the tEXt chunk that keeps the version a screenshot shows.
+private let versionKeyword = "Version"
+
+/// Checks menu.png against the code on every run, since the drawing only runs when asked.
+@MainActor
+struct MenuMockUpTests {
+    /// The mock-up writes some titles and symbols out, since the app builds them in place rather
+    /// than from constants. This stops the screenshot showing words the menu no longer uses.
+    @Test func theMockUpWritesOnlyWordsTheMenuUses() throws {
+        let source = try String(contentsOf: root.appendingPathComponent("Sources/main.swift"), encoding: .utf8)
+        for title in MenuBarMenu.writtenTitles {
+            #expect(source.contains("withTitle: \"\(title)\""), "main.swift has no \(title) item")
+        }
+        for symbol in MenuBarMenu.writtenSymbols {
+            #expect(source.contains("symbol(\"\(symbol)\")"), "main.swift's menu has no \(symbol) symbol")
+        }
+        #expect(source.contains("sectionHeader(title: \"\(MenuBarMenu.pinAWindow)\")"))
+        #expect(source.contains("\"Pin on Top \\(version)\""), "the menu's header isn't Pin on Top and the version")
+        #expect(source.contains("\"\\(MenuWords.alwaysPin) “\\(Rules.menuTitle(appName))”\""))
+        #expect(source.contains("window.title = \"Change Shortcut\""))
+    }
+
+    /// The menu's header shows the version, so a release has to draw the screenshots again. A run
+    /// that draws them skips this, as it would read menu.png while it's being written.
+    @Test(.disabled(if: drawing, "this run draws menu.png with build.sh's version"))
+    func menuPNGWasDrawnForTheVersionBuildShBuilds() throws {
+        let png = try Data(contentsOf: root.appendingPathComponent("docs/screenshots/menu.png"))
+        let drawnFor = texts(in: png)[versionKeyword]
+        let version = try buildVersion()
+        #expect(
+            drawnFor == version,
+            "menu.png shows \(drawnFor ?? "no version"), build.sh builds \(version), so draw the screenshots again")
+    }
+}
+
 // MARK: - Drawing
 
 /// Never shown. It says it's key, so the default button is drawn the way the app's windows draw it
@@ -56,9 +100,10 @@ private final class KeyWindow: NSWindow {
 }
 
 /// Draws a view at 2x in light mode, with the default blue accent whatever this Mac uses, and
-/// writes it to docs/screenshots as a PNG.
+/// writes it to docs/screenshots as a PNG. A screenshot that shows the version keeps it in the
+/// PNG too, for MenuMockUpTests to compare with build.sh's.
 @MainActor
-private func save(_ view: some View, as name: String) throws {
+private func save(_ view: some View, as name: String, version: String? = nil) throws {
     // The argument domain wins over this Mac's own setting, as a launch argument would. 4 is blue.
     var arguments = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
     arguments["AppleAccentColor"] = 4
@@ -81,7 +126,8 @@ private func save(_ view: some View, as name: String) throws {
     bitmap.size = size
     host.cacheDisplay(in: host.bounds, to: bitmap)
 
-    let png = try #require(bitmap.representation(using: .png, properties: [:]))
+    let drawn = try #require(bitmap.representation(using: .png, properties: [:]))
+    let png = try version.map { try adding(text: $0, keyword: versionKeyword, to: drawn) } ?? drawn
     let url = root.appendingPathComponent("docs/screenshots/\(name)")
     try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     try png.write(to: url)
@@ -94,21 +140,49 @@ private func buildVersion() throws -> String {
     return try #require(versions.first)
 }
 
-/// The menu mock-up writes some titles and symbols out, since the app builds them in place rather
-/// than from constants. This stops the screenshot showing words the menu no longer uses.
-@MainActor
-private func expectTheMenusOwnWords() throws {
-    let source = try String(contentsOf: root.appendingPathComponent("Sources/main.swift"), encoding: .utf8)
-    for title in MenuBarMenu.writtenTitles {
-        #expect(source.contains("withTitle: \"\(title)\""), "main.swift has no \(title) item")
+// MARK: - PNG text
+
+/// The PNG with a tEXt chunk added just before its end, keeping `text` under `keyword`.
+private func adding(text: String, keyword: String, to png: Data) throws -> Data {
+    // The end chunk, IEND, is always the last 12 bytes: its length, type and CRC.
+    let end = png.suffix(12)
+    try #require(end.dropFirst(4).prefix(4).elementsEqual("IEND".utf8), "the PNG doesn't finish with IEND")
+    let typeAndData = Data("tEXt\(keyword)\0\(text)".utf8)
+    let chunk = bigEndian(UInt32(typeAndData.count - 4)) + typeAndData + bigEndian(crc32(typeAndData))
+    return png.dropLast(12) + chunk + end
+}
+
+/// The keywords and text of a PNG's tEXt chunks.
+private func texts(in png: Data) -> [String: String] {
+    var texts: [String: String] = [:]
+    // Each chunk is its data's length, its type, its data and a CRC, after the 8-byte signature.
+    var rest = png.dropFirst(8)
+    while rest.count >= 12 {
+        let length = rest.prefix(4).reduce(0) { $0 << 8 | Int($1) }
+        if rest.dropFirst(4).prefix(4).elementsEqual("tEXt".utf8) {
+            let parts = rest.dropFirst(8).prefix(length).split(separator: 0, maxSplits: 1, omittingEmptySubsequences: false)
+            if let keyword = parts.first, let text = parts.dropFirst().first {
+                texts[String(decoding: keyword, as: UTF8.self)] = String(decoding: text, as: UTF8.self)
+            }
+        }
+        rest = rest.dropFirst(12 + length)
     }
-    for symbol in MenuBarMenu.writtenSymbols {
-        #expect(source.contains("symbol(\"\(symbol)\")"), "main.swift's menu has no \(symbol) symbol")
+    return texts
+}
+
+private func bigEndian(_ value: UInt32) -> Data {
+    withUnsafeBytes(of: value.bigEndian) { Data($0) }
+}
+
+/// The CRC-32 a PNG chunk ends with, of its type and data.
+private func crc32(_ bytes: Data) -> UInt32 {
+    let polynomial: UInt32 = 0xEDB8_8320
+    let crc = bytes.reduce(UInt32.max) { (crc: UInt32, byte: UInt8) -> UInt32 in
+        (0..<8).reduce(crc ^ UInt32(byte)) { (bits: UInt32, _: Int) -> UInt32 in
+            bits & 1 == 1 ? polynomial ^ (bits >> 1) : bits >> 1
+        }
     }
-    #expect(source.contains("sectionHeader(title: \"\(MenuBarMenu.pinAWindow)\")"))
-    #expect(source.contains("\"Pin on Top \\(version)\""), "the menu's header isn't Pin on Top and the version")
-    #expect(source.contains("\"\\(MenuWords.alwaysPin) “\\(Rules.menuTitle(appName))”\""))
-    #expect(source.contains("window.title = \"Change Shortcut\""))
+    return ~crc
 }
 
 // MARK: - Made-up apps

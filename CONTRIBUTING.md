@@ -146,7 +146,9 @@ Without `PIN_ON_TOP_SCREENSHOTS=1`, `./test.sh` and CI skip them. Commit the PNG
 README doesn't need the tests run. Drawing them again writes the same files unless something
 they show has changed or macOS draws it differently, so look at any PNG `git status` lists.
 The tests check that the README shows every screenshot and that every image it shows is a
-PNG in the repo.
+PNG in the repo. They also check that the menu's mock-up only writes out titles and symbols
+the menu still uses, and that `menu.png` was drawn for the version `build.sh` builds, since
+its header shows it.
 
 ## Releases
 
@@ -162,7 +164,7 @@ To make a release:
 1. Bump `VERSION` in `build.sh`, add a `## <version>` section at the top of `CHANGELOG.md`
    saying what changed, and update the zip's name in the README's install steps. The tests
    check that all three agree. Then draw the [screenshots](#screenshots) again, since the
-   menu's header shows the version.
+   menu's header shows the version. The tests check that too.
 2. Once that's on `main`, push the tag `v<version>`, such as `v1.1.0`.
 
 The Release workflow refuses a tag that doesn't match `VERSION`. It runs the tests, builds the
