@@ -19,9 +19,10 @@ the welcome window opens and what its tips say, which shortcuts the Change Short
 takes, how it names keys and what it stores, and that the docs, the build and the changelog
 agree with the code, using made-up windows and screens. They need no Screen Recording or
 Accessibility permission and touch nothing real. `./test.sh --filter Visibility` runs only
-the tests whose name matches. `./build.sh` builds the app the same way a release does, as one
-app for Apple silicon and Intel: `lipo -archs "build/Pin on Top.app/Contents/MacOS/PinOnTop"`
-prints `x86_64 arm64`.
+the tests whose name matches. The tests that draw the README's screenshots are skipped unless
+you ask for them (see [Screenshots](#screenshots)). `./build.sh` builds the app the same way a
+release does, as one app for Apple silicon and Intel:
+`lipo -archs "build/Pin on Top.app/Contents/MacOS/PinOnTop"` prints `x86_64 arm64`.
 
 The mirror itself, focusing windows, the menus, Always Pin, the welcome window, changing the
 shortcut and the permission prompts need a real Mac, so check these by hand when a change
@@ -126,6 +127,27 @@ iconutil -c iconset Resources/AppIcon.icns -o /tmp/AppIcon.iconset
 It writes `Resources/AppIcon.icns` for the app and `docs/icon.png` for the README. Commit
 both, so building doesn't need the script.
 
+## Screenshots
+
+The README's screenshots in `docs/screenshots` are drawn from code by
+`Tests/PinOnTopTests/ScreenshotTests.swift`: the welcome and Change Shortcut windows are the
+app's own views, and the desktop and the menu bar menu are mock-ups. Every app, window and
+word in them is made up, and they're never captured from a real screen, so please don't add
+a screen capture instead.
+
+After changing anything they show, such as the menus, the welcome window, the Change Shortcut
+window or the version, draw them again from the top folder and look at each one:
+
+```bash
+PIN_ON_TOP_SCREENSHOTS=1 ./test.sh --filter ScreenshotTests
+```
+
+Without `PIN_ON_TOP_SCREENSHOTS=1`, `./test.sh` and CI skip them. Commit the PNGs, so the
+README doesn't need the tests run. Drawing them again writes the same files unless something
+they show has changed or macOS draws it differently, so look at any PNG `git status` lists.
+The tests check that the README shows every screenshot and that every image it shows is a
+PNG in the repo.
+
 ## Releases
 
 ```bash
@@ -139,7 +161,8 @@ To make a release:
 
 1. Bump `VERSION` in `build.sh`, add a `## <version>` section at the top of `CHANGELOG.md`
    saying what changed, and update the zip's name in the README's install steps. The tests
-   check that all three agree.
+   check that all three agree. Then draw the [screenshots](#screenshots) again, since the
+   menu's header shows the version.
 2. Once that's on `main`, push the tag `v<version>`, such as `v1.1.0`.
 
 The Release workflow refuses a tag that doesn't match `VERSION`. It runs the tests, builds the
