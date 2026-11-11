@@ -885,16 +885,25 @@ enum Tip: CaseIterable, Sendable {
 /// What the welcome window shows, refreshed about once a second while it's open.
 @MainActor
 final class WelcomeModel: ObservableObject {
-    @Published private(set) var screenRecording = Permission.screenRecording.isGranted
-    @Published private(set) var accessibility = Permission.accessibility.isGranted
+    @Published private(set) var screenRecording: Bool
+    @Published private(set) var accessibility: Bool
     /// The shortcut in use, as the tips write it.
     @Published private(set) var shortcutText: String
     private let screenRecordingAtLaunch: Bool
     private let currentShortcut: () -> Shortcut
+    private let permissionIsGranted: (Permission) -> Bool
 
-    init(screenRecordingAtLaunch: Bool, currentShortcut: @escaping () -> Shortcut) {
+    /// `isGranted` says whether a permission is granted. It asks macOS, except in the README's
+    /// screenshots, which show both granted whatever the Mac drawing them has.
+    init(
+        screenRecordingAtLaunch: Bool, currentShortcut: @escaping () -> Shortcut,
+        isGranted: @escaping (Permission) -> Bool = { $0.isGranted }
+    ) {
         self.screenRecordingAtLaunch = screenRecordingAtLaunch
         self.currentShortcut = currentShortcut
+        permissionIsGranted = isGranted
+        screenRecording = isGranted(.screenRecording)
+        accessibility = isGranted(.accessibility)
         shortcutText = currentShortcut().text
     }
 
@@ -908,8 +917,8 @@ final class WelcomeModel: ObservableObject {
 
     func refresh() {
         // Only changes are published, so the window isn't redrawn every second for nothing.
-        let screenRecording = Permission.screenRecording.isGranted
-        let accessibility = Permission.accessibility.isGranted
+        let screenRecording = permissionIsGranted(.screenRecording)
+        let accessibility = permissionIsGranted(.accessibility)
         let shortcutText = currentShortcut().text
         if screenRecording != self.screenRecording { self.screenRecording = screenRecording }
         if accessibility != self.accessibility { self.accessibility = accessibility }
@@ -919,6 +928,9 @@ final class WelcomeModel: ObservableObject {
 
 struct WelcomeView: View {
     @ObservedObject var model: WelcomeModel
+    /// The app's icon. It's passed in rather than read from `NSApp` here, so the README's
+    /// screenshots can draw this view without the app running.
+    let icon: NSImage
     let grant: (Permission) -> Void
     let relaunch: () -> Void
     let showChangeShortcut: () -> Void
@@ -926,7 +938,7 @@ struct WelcomeView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Image(nsImage: NSApp.applicationIconImage)
+            Image(nsImage: icon)
                 .resizable()
                 .frame(width: 96, height: 96)
             VStack(spacing: 6) {
@@ -1078,7 +1090,10 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
     }
 
     private func makeWindow() -> NSWindow {
-        let view = WelcomeView(model: model, grant: grant, relaunch: relaunch, showChangeShortcut: showChangeShortcut) { [weak self] in
+        let view = WelcomeView(
+            model: model, icon: NSApp.applicationIconImage, grant: grant, relaunch: relaunch,
+            showChangeShortcut: showChangeShortcut
+        ) { [weak self] in
             self?.window?.close()
         }
         let window = NSWindow(contentViewController: NSHostingController(rootView: view))
