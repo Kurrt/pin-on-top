@@ -11,4 +11,9 @@ struct MenuTests {
     func aTitleOf70CharactersOrFewerIsKept(title: String) {
         #expect(Rules.menuTitle(title) == title)
     }
+
+    @Test(arguments: [MenuWords.opacity, MenuWords.alwaysPin, MenuWords.unpin])
+    func thePinBadgesTooltipNamesTheRightClickMenusOptions(option: String) {
+        #expect(MenuWords.badgeToolTip.contains(option))
+    }
 }
