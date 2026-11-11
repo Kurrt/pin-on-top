@@ -191,9 +191,9 @@ struct DocsTests {
         #expect(named.allSatisfy { $0 == bundleID }, "\(path): \(named)")
     }
 
-    @Test func theReadmesLineCountForMainSwiftIsWithinATenth() throws {
+    @Test func theReadmeLinksMainSwiftAndItsLineCountIsWithinATenth() throws {
         let lines = try read("Sources/main.swift").filter { $0 == "\n" }.count
-        let claimed = try read("README.md").matches(of: #/a single Swift file \(about (\d+) lines\)/#).compactMap { Int($0.1) }
+        let claimed = try read("README.md").matches(of: #/\[a single Swift file\]\(Sources/main\.swift\) \(about (\d+) lines\)/#).compactMap { Int($0.1) }
         #expect(claimed.count == 1)
         for count in claimed {
             #expect(abs(count - lines) * 10 <= lines, "README says about \(count) lines, main.swift has \(lines)")

@@ -4,7 +4,7 @@
 
 A tiny macOS menu bar app that keeps any window floating above everything else.
 
-Most "always on top" tools are closed source, want broad permissions, or inject code into other apps. Pin on Top is a single Swift file (about 1300 lines) you can read in one sitting. It uses only Apple's frameworks and has no dependencies and no networking code. Download it, or build it yourself from source.
+Most "always on top" tools are closed source, want broad permissions, or inject code into other apps. Pin on Top is [a single Swift file](Sources/main.swift) (about 1300 lines) you can read in one sitting. It uses only Apple's frameworks and has no dependencies and no networking code. Download it, or build it yourself from source.
 
 ## Features
 
