@@ -27,6 +27,18 @@ private func newestChangelogSection() throws -> String {
 
 private let projectPage = "https://github.com/Kurrt/pin-on-top"
 
+/// The eight bytes every PNG starts with.
+private let pngSignature = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+
+/// The images the README shows, as paths from the top folder: its HTML images, which it uses to
+/// set a width, and any Markdown ones.
+private func readmeImages() throws -> [String] {
+    let readme = try read("README.md")
+    let html = readme.matches(of: #/<img\s[^>]*src="([^"]+)"/#).map { String($0.1) }
+    let markdown = readme.matches(of: #/!\[[^\]]*\]\(([^)\s]+)/#).map { String($0.1) }
+    return html + markdown
+}
+
 /// The default shortcut the way the docs write it, from the code's default rather than whichever
 /// is stored on this Mac: ⌃⌥⌘P and Control-Option-Command-P.
 private func shortcut() -> (glyphs: String, words: String) {
@@ -176,10 +188,32 @@ struct DocsTests {
         #expect(icns.range(of: Data("ic10".utf8)) != nil)
 
         let png = try Data(contentsOf: root.appendingPathComponent("docs/icon.png"))
-        #expect(png.prefix(8) == Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))
+        #expect(png.prefix(8) == pngSignature)
         // The width and height, big-endian, open the header chunk at byte 16.
         let size = [16, 20].map { start in png.dropFirst(start).prefix(4).reduce(0) { $0 << 8 | Int($1) } }
         #expect(size == [512, 512])
+    }
+
+    // The icon and the screenshots are committed PNGs, kept small so the README loads quickly.
+    @Test func everyImageTheReadmeShowsIsASmallPNGInTheRepo() throws {
+        let images = try readmeImages()
+        #expect(images.contains("docs/icon.png"))
+        for path in images {
+            let png = try? Data(contentsOf: root.appendingPathComponent(path))
+            #expect(png?.prefix(8) == pngSignature, "the README shows \(path), which isn't a PNG in the repo")
+            #expect((png?.count ?? 0) < 500_000, "\(path) is \(png?.count ?? 0) bytes")
+        }
+    }
+
+    @Test func theReadmeShowsEveryScreenshot() throws {
+        let folder = root.appendingPathComponent("docs/screenshots")
+        let files = try FileManager.default.contentsOfDirectory(atPath: folder.path).filter { !$0.hasPrefix(".") }
+        #expect(!files.isEmpty)
+        let shown = Set(try readmeImages())
+        for file in files {
+            #expect(file.hasSuffix(".png"), "docs/screenshots/\(file) isn't a PNG")
+            #expect(shown.contains("docs/screenshots/\(file)"), "the README doesn't show docs/screenshots/\(file)")
+        }
     }
 
     // The README's install steps name the download, so a release has to update them too.

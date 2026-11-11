@@ -6,6 +6,8 @@ A tiny macOS menu bar app that keeps any window floating above everything else.
 
 Most "always on top" tools are closed source, want broad permissions, or inject code into other apps. Pin on Top is [a single Swift file](Sources/main.swift) (about 1800 lines) you can read in one sitting. It uses only Apple's frameworks and has no dependencies and no networking code. Download it, or build it yourself from source.
 
+<img src="docs/screenshots/pinned.png" alt="A small Timer window pinned on top of a big Recipes window" width="800">
+
 ## Features
 
 - Pin any window with **⌃⌥⌘P** (Control-Option-Command-P), or pick it from the menu bar list
@@ -68,6 +70,8 @@ Pin on Top needs two permissions. The first time it opens, and whenever one of t
 
 To see it again, choose **Welcome and Tips…** from the menu bar menu. Below the permissions it has tips on pinning, switching to a pinned window, finding its options and Always Pin. **Change…** beside the first tip opens a window to change the shortcut. If the menu shows a **Grant…** item, that permission is still missing.
 
+<img src="docs/screenshots/welcome.png" alt="The welcome window, with both permissions granted and the tips" width="448">
+
 | Permission | Why it's needed |
 | --- | --- |
 | Screen Recording | To show the live mirror of a pinned window (see below). |
@@ -77,11 +81,16 @@ Nothing leaves your Mac. The app opens System Settings when you grant a permissi
 
 ## Usage
 
+<img src="docs/screenshots/menu.png" alt="The menu bar menu, with a pinned window's options open" width="500">
+
 - **Pin:** focus a window and press ⌃⌥⌘P (or the shortcut you chose), or choose it under **Pin a Window** in the menu bar menu.
 - **Unpin:** press the shortcut on the pinned window, or choose **Unpin** after right-clicking its mirror or pointing to it under **Pinned** in the menu bar menu. Clicking a window under **Pinned** opens the same options as right-clicking, rather than unpinning it.
 - **Use the pinned window:** click it. The real window comes forward and you can type, scroll and resize as usual. When you switch to another app it floats on top again.
 - **Opacity:** right-click a pinned window, or point to it under **Pinned** in the menu bar menu, and choose **Opacity**. It stays that way until you unpin the window.
 - **Change the shortcut:** choose **Change Shortcut…** in the menu bar menu, or **Change…** beside the first tip in the welcome window. Choose **Record New Shortcut** and press a key while holding ⌘, ⌃ or ⌥ (Shift alone isn't enough), or press Escape to cancel. The new shortcut works at once and is kept when Pin on Top quits. A shortcut another app answers from anywhere, such as Spotlight's ⌘Space, goes to that app instead, so choose a different one. If macOS won't register a shortcut, the window says so and the old one keeps working. **Reset to ⌃⌥⌘P** goes back to the default.
+
+  <img src="docs/screenshots/shortcut.png" alt="The Change Shortcut window, showing the default shortcut" width="412">
+
 - **About:** choose **About Pin on Top** in the menu for the version and a link to the project page.
 
 A small pin badge appears when you hover over a pinned window that's floating on top. Its tooltip says what clicking and right-clicking do.
