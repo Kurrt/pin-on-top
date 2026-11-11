@@ -893,17 +893,17 @@ final class WelcomeModel: ObservableObject {
     private let currentShortcut: () -> Shortcut
     private let permissionIsGranted: (Permission) -> Bool
 
-    /// `isGranted` says whether a permission is granted. It asks macOS, except in the README's
-    /// screenshots, which show both granted whatever the Mac drawing them has.
+    /// `permissionIsGranted` says whether a permission is granted. It asks macOS, except in the
+    /// README's screenshots, which show both granted whatever the Mac drawing them has.
     init(
         screenRecordingAtLaunch: Bool, currentShortcut: @escaping () -> Shortcut,
-        isGranted: @escaping (Permission) -> Bool = { $0.isGranted }
+        permissionIsGranted: @escaping (Permission) -> Bool = { $0.isGranted }
     ) {
         self.screenRecordingAtLaunch = screenRecordingAtLaunch
         self.currentShortcut = currentShortcut
-        permissionIsGranted = isGranted
-        screenRecording = isGranted(.screenRecording)
-        accessibility = isGranted(.accessibility)
+        self.permissionIsGranted = permissionIsGranted
+        screenRecording = permissionIsGranted(.screenRecording)
+        accessibility = permissionIsGranted(.accessibility)
         shortcutText = currentShortcut().text
     }
 
