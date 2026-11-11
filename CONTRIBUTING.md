@@ -15,17 +15,18 @@ Run the tests from the top folder, on macOS 14 or newer with the Xcode Command L
 
 They check the window list, the coordinate maths, the capture size, when a mirror shows and
 fades, which window the shortcut picks, which window Always Pin picks and what it stores, when
-the welcome window opens, and that the docs, the build and the changelog agree with the code,
-using made-up windows and screens. They need no Screen Recording or Accessibility permission
-and touch nothing real. `./test.sh --filter Visibility` runs only the tests whose name
-matches. `./build.sh` builds the app the same way a release does, as one app for Apple silicon
-and Intel: `lipo -archs "build/Pin on Top.app/Contents/MacOS/PinOnTop"` prints
-`x86_64 arm64`.
+the welcome window opens and what its tips say, which shortcuts the Change Shortcut window
+takes, how it names keys and what it stores, and that the docs, the build and the changelog
+agree with the code, using made-up windows and screens. They need no Screen Recording or
+Accessibility permission and touch nothing real. `./test.sh --filter Visibility` runs only
+the tests whose name matches. `./build.sh` builds the app the same way a release does, as one
+app for Apple silicon and Intel: `lipo -archs "build/Pin on Top.app/Contents/MacOS/PinOnTop"`
+prints `x86_64 arm64`.
 
-The mirror itself, focusing windows, Always Pin, the welcome window and the permission
-prompts need a real Mac, so check these by hand when a change touches them. The app is signed
-ad hoc, so macOS treats each build as a new app: after you rebuild, both permissions stop
-working though System Settings still shows them on.
+The mirror itself, focusing windows, the menus, Always Pin, the welcome window, changing the
+shortcut and the permission prompts need a real Mac, so check these by hand when a change
+touches them. The app is signed ad hoc, so macOS treats each build as a new app: after you
+rebuild, both permissions stop working though System Settings still shows them on.
 `tccutil reset ScreenCapture io.github.kurrt.pin-on-top` (or `Accessibility`) takes a
 permission away so you can grant it again, and `defaults delete io.github.kurrt.pin-on-top`
 makes the next launch a first one.
@@ -57,6 +58,18 @@ makes the next launch a first one.
 - Take Screen Recording away and reopen Pin on Top. Always Pin does nothing and shows no alert,
   though the welcome window opens.
 
+**The Pinned submenu**
+
+- Pin two windows and open the menu bar menu. Each is under **Pinned** with its app's icon and
+  a tick, and pointing to one opens the same items as right-clicking it. Clicking it doesn't
+  unpin it.
+- **Opacity** there ticks the window's current step, and choosing another changes the mirror.
+  The right-click menu then ticks the same step.
+- **Always Pin “App”** there turns Always Pin on and off, and the **Always Pin** section
+  follows. For an app with no bundle identifier it's greyed out, with a tooltip saying why.
+- **Go to Window** there brings the window forward, and **Unpin** unpins it.
+- Hover over a floating mirror's pin badge. Its tooltip names Opacity, Always Pin and Unpin.
+
 **The welcome window and permissions**
 
 - After `defaults delete`, it opens at launch. With both permissions on, it doesn't open at
@@ -65,8 +78,33 @@ makes the next launch a first one.
   Settings page. Once the permission is on, the row turns to **Granted** within about a
   second.
 - After you grant Screen Recording, **Quit and Reopen** shows and reopens the app.
-- **Done** closes it, and **Welcome and Permissions…** in the menu opens it again.
+- Below the permissions are four tips, each on one or two lines, and the first shows the
+  shortcut in use.
+- **Change…** beside the first tip opens the Change Shortcut window. Change the shortcut and
+  the tip shows the new one straight away.
+- **Done** closes it, and **Welcome and Tips…** in the menu opens it again.
 - Turn Accessibility off. **Grant Accessibility…** shows in the menu and pinning still works.
+
+**Changing the shortcut**
+
+- **Change Shortcut…** in the menu opens the window, showing the shortcut in use. Choose
+  **Record New Shortcut** and press ⇧⌘K. It pins and unpins straight away, ⌃⌥⌘P no longer
+  does, and **Pin/Unpin Frontmost Window** in the menu shows ⇧⌘K.
+- While recording, hold modifier keys alone and it keeps waiting. Press K, or ⇧K, and the
+  window says a shortcut needs ⌘, ⌃ or ⌥ and keeps recording.
+- While recording, press a shortcut another app answers from anywhere, such as Spotlight's
+  ⌘Space. That app gets the press, so the window can't record it: it keeps waiting, or stops
+  recording if that app comes forward. The window only says another app may be using a
+  shortcut when macOS refuses one, and in practice that's **Reset to ⌃⌥⌘P** while another app
+  holds ⌃⌥⌘P for itself alone.
+- While recording, press Escape, switch to another app, or close the window. Each time,
+  recording stops and the old shortcut pins again.
+- While recording, press the current shortcut. It's recorded rather than pinning a window.
+- **Reset to ⌃⌥⌘P** is greyed out while the shortcut is ⌃⌥⌘P. After a change it brings
+  ⌃⌥⌘P back.
+- Record ⌥F5, then ⌃⌥←. **Pin/Unpin Frontmost Window** shows each as its key equivalent.
+- Quit and reopen Pin on Top. Your shortcut still pins. Quit, run `defaults delete` and reopen
+  it, and ⌃⌥⌘P pins again.
 
 **About and the menu**
 
@@ -102,7 +140,7 @@ To make a release:
 1. Bump `VERSION` in `build.sh`, add a `## <version>` section at the top of `CHANGELOG.md`
    saying what changed, and update the zip's name in the README's install steps. The tests
    check that all three agree.
-2. Once that's on `main`, push the tag `v<version>`, such as `v1.0.0`.
+2. Once that's on `main`, push the tag `v<version>`, such as `v1.1.0`.
 
 The Release workflow refuses a tag that doesn't match `VERSION`. It runs the tests, builds the
 zip and publishes it with its `.sha256`, using the changelog section as the release notes.
@@ -147,9 +185,10 @@ that the app works differently, add `!` after the type or scope and say what to 
 body:
 
 ```
-feat(hotkey)!: move the shortcut to Control-Option-Command-T
+feat(hotkey)!: move the default shortcut to Control-Option-Command-T
 
-Use Control-Option-Command-T to pin and unpin after you rebuild.
+Unless you've changed the shortcut, use Control-Option-Command-T to pin and unpin after you
+rebuild.
 ```
 
 A pull request's title follows the same rule. A squash merge makes one commit, and by default

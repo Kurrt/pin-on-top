@@ -23,18 +23,22 @@ It's worth knowing what you're giving it before you turn its permissions on.
   window, and it doesn't press keys or click for you.
 - **The window list.** To fill the menu, and for Always Pin, it reads each on-screen window's
   app name, title, position and size from macOS. Titles never leave your Mac.
-- **One shortcut.** It registers ⌃⌥⌘P with macOS, and macOS tells it about that shortcut
-  only, not other keys.
+- **One shortcut.** It registers the shortcut you choose, ⌃⌥⌘P by default, with macOS, and
+  macOS tells it about that shortcut only, not other keys. While you record a new one in the
+  Change Shortcut window, it sees only the keys you press in that window, and it stops
+  recording when you close the window or switch to another app.
 - **Open at Login**, only if you turn it on, through macOS's own login items.
-- **What it keeps.** Two things, in the app's preferences on this Mac only:
+- **What it keeps.** Three things, in the app's preferences on this Mac only:
   - **Always Pin's apps**, only if you use it. For each app, its bundle ID (such as
     `com.apple.Notes`), its name and the title of the window pinned last, as JSON under the
     `alwaysPin` key. Turning an app off removes it, and turning them all off leaves an empty
     list.
   - **`hasSeenWelcome`**, set once the welcome window has shown, so it doesn't open at every
     launch.
+  - **The shortcut**, only if you change it. Its key code, modifiers and the key's name, as
+    JSON under the `shortcut` key. Resetting it to ⌃⌥⌘P removes the key.
 
-  To clear both, quit Pin on Top and run `defaults delete io.github.kurrt.pin-on-top`.
+  To clear them all, quit Pin on Top and run `defaults delete io.github.kurrt.pin-on-top`.
 - **What it opens.**
   - System Settings, at the right page, when you ask to grant a permission. **Grant…** asks
     macOS for the permission first, which may show macOS's own prompt.

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.1.0
+
+Pin on Top's options are easier to find, and you can change the shortcut.
+
+**New**
+
+- **Change Shortcut…** in the menu bar menu, and **Change…** in the welcome window, for when ⌃⌥⌘P clashes with another
+  app. Choose **Record New Shortcut** and press a key while holding ⌘, ⌃ or ⌥. The window says why when it can't use a
+  shortcut, including when macOS won't register it, and the old one keeps working. **Reset to ⌃⌥⌘P** goes back to the
+  default. The menu and the welcome window show the shortcut you chose, and it's kept when Pin on Top quits.
+- Tips in the welcome window: how to pin and switch to a pinned window, and where its options and Always Pin are.
+
+**Changed**
+
+- Each window under **Pinned** in the menu bar menu opens the same options as right-clicking it: Go to Window,
+  Opacity, Always Pin and Unpin. Clicking it no longer unpins it.
+- The menu's welcome item is now **Welcome and Tips…**, since the window has tips as well as the permissions.
+- The pin badge's tooltip names the right-click menu's options.
+
 ## 1.0.0
 
 The first release you can download. Before this, you built Pin on Top from source, which still works.

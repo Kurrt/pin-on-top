@@ -20,15 +20,21 @@ private func buildVersion() throws -> String {
     return try #require(versions.first)
 }
 
+/// CHANGELOG.md's newest section, from just after its heading.
+private func newestChangelogSection() throws -> String {
+    try #require(read("CHANGELOG.md").components(separatedBy: "\n## ").dropFirst().first)
+}
+
 private let projectPage = "https://github.com/Kurrt/pin-on-top"
 
-/// The shortcut the way the docs write it, from the hot key itself: ⌃⌥⌘P and Control-Option-Command-P.
+/// The default shortcut the way the docs write it, from the code's default rather than whichever
+/// is stored on this Mac: ⌃⌥⌘P and Control-Option-Command-P.
 private func shortcut() -> (glyphs: String, words: String) {
     let modifiers: [(flag: NSEvent.ModifierFlags, glyph: String, word: String)] = [
         (.control, "⌃", "Control"), (.option, "⌥", "Option"), (.shift, "⇧", "Shift"), (.command, "⌘", "Command"),
     ]
-    let used = modifiers.filter { HotKey.menuModifiers.contains($0.flag) }
-    let key = HotKey.menuKey.uppercased()
+    let used = modifiers.filter { HotKey.standard.modifierFlags.contains($0.flag) }
+    let key = HotKey.standard.key
     return (used.map(\.glyph).joined() + key, (used.map(\.word) + [key]).joined(separator: "-"))
 }
 
@@ -127,8 +133,27 @@ struct DocsTests {
         let changelog = try read("CHANGELOG.md")
         let sections = changelog.matches(of: #/^## (.+)$/#.anchorsMatchLineEndings()).map { String($0.1) }
         #expect(sections.first == version, "CHANGELOG.md's sections: \(sections)")
-        let newest = try #require(changelog.components(separatedBy: "\n## ").dropFirst().first)
-        #expect(newest.contains("\n- "), "the \(version) section has no list of changes")
+        #expect(try newestChangelogSection().contains("\n- "), "the \(version) section has no list of changes")
+    }
+
+    // The menu bar menu's items for the welcome window and the Change Shortcut window, which the
+    // docs tell people to choose.
+    @Test(arguments: ["README.md", "CONTRIBUTING.md", "CHANGELOG.md"])
+    func theDocsNameTheWelcomeAndChangeShortcutItemsAsTheMenuDoes(path: String) throws {
+        let source = try read("Sources/main.swift")
+        let text = try read(path)
+        for item in ["Welcome and Tips…", "Change Shortcut…"] {
+            #expect(source.contains("withTitle: \"\(item)\""), "main.swift has no \(item) item")
+            #expect(text.contains("**\(item)**"), "\(path) doesn't name \(item)")
+        }
+    }
+
+    // The welcome window's item was Welcome and Permissions… until 1.1.0. Only the changelog's
+    // older sections, which are history, still say so.
+    @Test(arguments: ["README.md", "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md", "Sources/main.swift"])
+    func nothingButTheChangelogsHistoryStillSaysWelcomeAndPermissions(path: String) throws {
+        let text = try path == "CHANGELOG.md" ? newestChangelogSection() : read(path)
+        #expect(!text.contains("Welcome and Permissions"), "\(path)")
     }
 
     @Test(arguments: ["CFBundleShortVersionString", "CFBundleVersion"])
