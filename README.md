@@ -88,10 +88,9 @@ Nothing leaves your Mac. The app opens System Settings when you grant a permissi
 - **Use the pinned window:** click it. The real window comes forward and you can type, scroll and resize as usual. When you switch to another app it floats on top again.
 - **Opacity:** right-click a pinned window, or point to it under **Pinned** in the menu bar menu, and choose **Opacity**. It stays that way until you unpin the window.
 - **Change the shortcut:** choose **Change Shortcut…** in the menu bar menu, or **Change…** beside the first tip in the welcome window. Choose **Record New Shortcut** and press a key while holding ⌘, ⌃ or ⌥ (Shift alone isn't enough), or press Escape to cancel. The new shortcut works at once and is kept when Pin on Top quits. A shortcut another app answers from anywhere, such as Spotlight's ⌘Space, goes to that app instead, so choose a different one. If macOS won't register a shortcut, the window says so and the old one keeps working. **Reset to ⌃⌥⌘P** goes back to the default.
-
-  <img src="docs/screenshots/shortcut.png" alt="The Change Shortcut window, showing the default shortcut" width="412">
-
 - **About:** choose **About Pin on Top** in the menu for the version and a link to the project page.
+
+<img src="docs/screenshots/shortcut.png" alt="The Change Shortcut window, showing the default shortcut" width="412">
 
 A small pin badge appears when you hover over a pinned window that's floating on top. Its tooltip says what clicking and right-clicking do.
 
