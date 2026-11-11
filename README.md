@@ -4,17 +4,18 @@
 
 A tiny macOS menu bar app that keeps any window floating above everything else.
 
-Most "always on top" tools are closed source, want broad permissions, or inject code into other apps. Pin on Top is [a single Swift file](Sources/main.swift) (about 1300 lines) you can read in one sitting. It uses only Apple's frameworks and has no dependencies and no networking code. Download it, or build it yourself from source.
+Most "always on top" tools are closed source, want broad permissions, or inject code into other apps. Pin on Top is [a single Swift file](Sources/main.swift) (about 1800 lines) you can read in one sitting. It uses only Apple's frameworks and has no dependencies and no networking code. Download it, or build it yourself from source.
 
 ## Features
 
 - Pin any window with **⌃⌥⌘P** (Control-Option-Command-P), or pick it from the menu bar list
+- Change the shortcut if ⌃⌥⌘P clashes with another app
 - Pin as many windows as you like
 - Pinned windows float above every other app, fading in and out as you switch
 - Click a pinned window to jump straight to it
-- Right-click a pinned window to change its opacity, Always Pin its app, or unpin it
+- Right-click a pinned window, or find it in the menu bar menu, to change its opacity, Always Pin its app, or unpin it
 - **Always Pin** remembers an app and keeps one of its windows pinned after the app, Pin on Top or the Mac restarts
-- A welcome window that walks you through the two permissions
+- A welcome window that walks you through the two permissions, with tips on where everything is
 - One app for Apple silicon and Intel Macs
 - Optional "Open at Login"
 
@@ -24,11 +25,11 @@ You need macOS 14 Sonoma or later.
 
 ### Download
 
-1. Download `Pin-on-Top-1.0.0.zip` and `Pin-on-Top-1.0.0.zip.sha256` from the [latest release](https://github.com/Kurrt/pin-on-top/releases/latest).
-2. To check the zip, run this in Terminal in the folder you saved them to (usually `cd ~/Downloads` first). It should print `Pin-on-Top-1.0.0.zip: OK`.
+1. Download `Pin-on-Top-1.1.0.zip` and `Pin-on-Top-1.1.0.zip.sha256` from the [latest release](https://github.com/Kurrt/pin-on-top/releases/latest).
+2. To check the zip, run this in Terminal in the folder you saved them to (usually `cd ~/Downloads` first). It should print `Pin-on-Top-1.1.0.zip: OK`.
 
    ```bash
-   shasum -a 256 -c Pin-on-Top-1.0.0.zip.sha256
+   shasum -a 256 -c Pin-on-Top-1.1.0.zip.sha256
    ```
 
    Safari may unzip downloads for you. If the zip has gone, turn off **Open “safe” files after downloading** in Safari's General settings and download it again.
@@ -53,7 +54,7 @@ This builds `build/Pin on Top.app` as one app for Apple silicon and Intel, copie
 
 ### Updating
 
-Quit Pin on Top and replace the app in Applications with the new download, as above. If you build from source, pull and run `./build.sh --install` again. Your Always Pin apps are kept.
+Quit Pin on Top and replace the app in Applications with the new download, as above. If you build from source, pull and run `./build.sh --install` again. Your Always Pin apps and your shortcut are kept.
 
 The app is signed ad hoc, so macOS treats each new build, downloaded or built yourself, as a new app and it needs its permissions again. Remove **Pin on Top** from Screen Recording and Accessibility in System Settings > Privacy & Security, then open it and grant them again from the welcome window.
 
@@ -65,7 +66,7 @@ Pin on Top needs two permissions. The first time it opens, and whenever one of t
 2. Screen Recording only starts working once the app reopens, so choose **Quit and Reopen** after you turn it on.
 3. Choose **Done**.
 
-To see it again, choose **Welcome and Permissions…** from the menu bar menu. If the menu shows a **Grant…** item, that permission is still missing.
+To see it again, choose **Welcome and Tips…** from the menu bar menu. Below the permissions it has tips on pinning, switching to a pinned window, finding its options and Always Pin. **Change…** beside the first tip opens a window to change the shortcut. If the menu shows a **Grant…** item, that permission is still missing.
 
 | Permission | Why it's needed |
 | --- | --- |
@@ -76,21 +77,22 @@ Nothing leaves your Mac. The app opens System Settings when you grant a permissi
 
 ## Usage
 
-- **Pin:** focus a window and press ⌃⌥⌘P, or choose it under **Pin a Window** in the menu bar menu.
-- **Unpin:** press ⌃⌥⌘P on the pinned window, right-click its mirror and choose **Unpin**, or click it under **Pinned** in the menu.
+- **Pin:** focus a window and press ⌃⌥⌘P (or the shortcut you chose), or choose it under **Pin a Window** in the menu bar menu.
+- **Unpin:** press the shortcut on the pinned window, or choose **Unpin** after right-clicking its mirror or pointing to it under **Pinned** in the menu bar menu. Clicking a window under **Pinned** opens the same options as right-clicking, rather than unpinning it.
 - **Use the pinned window:** click it. The real window comes forward and you can type, scroll and resize as usual. When you switch to another app it floats on top again.
-- **Opacity:** right-click a pinned window and choose **Opacity**. It stays that way until you unpin the window.
+- **Opacity:** right-click a pinned window, or point to it under **Pinned** in the menu bar menu, and choose **Opacity**. It stays that way until you unpin the window.
+- **Change the shortcut:** choose **Change Shortcut…** in the menu bar menu, or **Change…** beside the first tip in the welcome window. Choose **Record New Shortcut** and press a key while holding ⌘, ⌃ or ⌥ (Shift alone isn't enough), or press Escape to cancel. The new shortcut works at once and is kept when Pin on Top quits. A shortcut another app answers from anywhere, such as Spotlight's ⌘Space, goes to that app instead, so choose a different one. If macOS won't register a shortcut, the window says so and the old one keeps working. **Reset to ⌃⌥⌘P** goes back to the default.
 - **About:** choose **About Pin on Top** in the menu for the version and a link to the project page.
 
-A small pin badge appears when you hover over a pinned window that's floating on top.
+A small pin badge appears when you hover over a pinned window that's floating on top. Its tooltip says what clicking and right-clicking do.
 
 ### Always Pin
 
-Right-click a pinned window and choose **Always Pin “App”** (with the app's name) to turn it on or off. You can also turn an app off by clicking it under **Always Pin** in the menu bar menu. Turning it off doesn't unpin the window.
+Right-click a pinned window, or point to it under **Pinned** in the menu bar menu, and choose **Always Pin “App”** (with the app's name) to turn it on or off. You can also turn an app off by clicking it under **Always Pin** in the menu bar menu. Turning it off doesn't unpin the window.
 
 While it's on, Pin on Top checks about once a second. If the app is running and none of its windows is pinned, it pins the window with the same title as the one pinned last, or else the app's frontmost window. So the window comes back after the app, Pin on Top or the Mac restarts (turn on **Open at Login** for that last one), and when the pinned window closes, the app's next window is pinned.
 
-- Unpinning one of its windows by hand (the shortcut, **Unpin**, or the **Pinned** list) pauses Always Pin for that app until it quits and opens again, or until you pin one of its windows by hand or turn Always Pin off and on.
+- Unpinning one of its windows by hand (the shortcut, or **Unpin** in either menu) pauses Always Pin for that app until it quits and opens again, or until you pin one of its windows by hand or turn Always Pin off and on.
 - It needs Screen Recording and does nothing without it.
 - Apps without a bundle identifier can't be remembered, so the item is greyed out for them.
 
@@ -116,7 +118,7 @@ To match Accessibility windows to window IDs, the app uses `_AXUIElementGetWindo
 
 ## Uninstall
 
-Turn off **Open at Login** if it's on, choose **Quit Pin on Top** from the menu bar menu, and delete `/Applications/Pin on Top.app`. Then remove it from Screen Recording and Accessibility in System Settings. To forget its Always Pin apps and the welcome window too, run:
+Turn off **Open at Login** if it's on, choose **Quit Pin on Top** from the menu bar menu, and delete `/Applications/Pin on Top.app`. Then remove it from Screen Recording and Accessibility in System Settings. To forget its Always Pin apps, its shortcut and the welcome window too, run:
 
 ```bash
 defaults delete io.github.kurrt.pin-on-top
