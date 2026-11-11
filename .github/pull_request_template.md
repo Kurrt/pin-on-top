@@ -6,4 +6,4 @@
 
 - [ ] The tests pass
 - [ ] The docs match the change
-- [ ] No real window titles, screenshots or personal details in the code, tests or docs
+- [ ] No screen captures, real window titles or personal details in the code, tests or docs (screenshots mocked from code are fine)
