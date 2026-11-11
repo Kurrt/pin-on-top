@@ -32,7 +32,7 @@ struct ScreenshotTests {
 
     @Test func drawsTheWelcomeWindowWithBothPermissionsGranted() throws {
         let model = WelcomeModel(
-            screenRecordingAtLaunch: true, currentShortcut: { HotKey.standard }, isGranted: { _ in true })
+            screenRecordingAtLaunch: true, currentShortcut: { HotKey.standard }, permissionIsGranted: { _ in true })
         // The README's copy of the icon, drawn by the same code as the app's.
         let icon = try #require(NSImage(contentsOf: root.appendingPathComponent("docs/icon.png")))
         let view = WelcomeView(model: model, icon: icon, grant: { _ in }, relaunch: {}, showChangeShortcut: {}, done: {})
