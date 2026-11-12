@@ -58,7 +58,14 @@ This builds `build/Pin on Top.app` as one app for Apple silicon and Intel, copie
 
 Quit Pin on Top and replace the app in Applications with the new download, as above. If you build from source, pull and run `./build.sh --install` again. Your Always Pin apps and your shortcut are kept.
 
-The app is signed ad hoc, so macOS treats each new build, downloaded or built yourself, as a new app and it needs its permissions again. Remove **Pin on Top** from Screen Recording and Accessibility in System Settings > Privacy & Security, then open it and grant them again from the welcome window.
+The app is signed ad hoc, so macOS treats each new build, downloaded or built yourself, as a new app and it needs its permissions again. Quit Pin on Top and clear its old entries by running this in Terminal, or by removing **Pin on Top** from Screen Recording and Accessibility in System Settings > Privacy & Security:
+
+```bash
+tccutil reset ScreenCapture io.github.kurrt.pin-on-top
+tccutil reset Accessibility io.github.kurrt.pin-on-top
+```
+
+Then open it and grant them again from the welcome window. If a permission's switch turns itself off after you turn it on, or the welcome window keeps asking for one you've granted, an old entry is still there: clear it the same way and grant it again.
 
 ## Permissions
 

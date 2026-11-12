@@ -250,6 +250,13 @@ struct DocsTests {
         #expect(named.allSatisfy { $0 == bundleID }, "\(path): \(named)")
     }
 
+    // tccutil only knows the services by these names (not "ScreenRecording"), so a typo would fail when run.
+    @Test(arguments: ["README.md", "SECURITY.md", "CONTRIBUTING.md"])
+    func theDocsResetOnlyTheTwoPermissionsTheAppUses(path: String) throws {
+        let services = try read(path).matches(of: #/tccutil reset (\w+)/#).map { String($0.1) }
+        #expect(services.allSatisfy { ["ScreenCapture", "Accessibility"].contains($0) }, "\(path): \(services)")
+    }
+
     @Test func theReadmeLinksMainSwiftAndItsLineCountIsWithinATenth() throws {
         let lines = try read("Sources/main.swift").filter { $0 == "\n" }.count
         let claimed = try read("README.md").matches(of: #/\[a single Swift file\]\(Sources/main\.swift\) \(about (\d+) lines\)/#).compactMap { Int($0.1) }
